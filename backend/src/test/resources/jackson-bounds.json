@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "V33 四个守卫阈值的校准基准（Jackson StreamReadConstraints 读侧上限）。",
+    "",
+    "来源：本值不是凭文档记忆写的，而是用 StreamReadConstraints.defaults() 在项目",
+    "实际使用的 jackson-core 2.17.2 上读出来的；由于 jackson-bom.version 继承自",
+    "Spring Boot 父 POM（spring-boot-dependencies-3.3.4.pom:78），一次 3.3 -> 3.4",
+    "升级就可能改变这些数字，而 V33 一行都不用改。",
+    "",
+    "JacksonBoundContractTest 会读取此文件并与运行时真实值比较：",
+    "  - 运行时上限 >= 记录值  -> 守卫仍然安全（只是余量变大），测试通过；",
+    "  - 运行时上限 <  记录值  -> 守卫可能失效，测试失败并要求重新校准 V33。",
+    "因此升级 Jackson 时这个测试会告诉你是否需要回头看 V33，而不是静默失效。"
+  ],
+  "jacksonVersion": "2.17.2",
+  "bomSource": "spring-boot-dependencies-3.3.4.pom#jackson-bom.version",
+  "recordedAt": "2026-10-27",
+  "streamReadConstraints": {
+    "maxNestingDepth": 1000,
+    "maxNumberLength": 1000,
+    "maxStringLength": 20000000,
+    "maxNameLength": 50000
+  },
+  "v33Thresholds": {
+    "depth": 200,
+    "numberLength": 700,
+    "stringLength": 1000000,
+    "nameLength": 40000
+  }
+}

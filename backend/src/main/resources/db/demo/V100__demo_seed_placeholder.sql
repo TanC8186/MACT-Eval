@@ -1,0 +1,11 @@
+-- demo profile 专用演示数据迁移目录
+--
+-- 该目录仅在激活 demo profile 时由 application-demo.yml 叠加加载
+-- (classpath:db/demo)。默认/生产 profile 不会执行本目录下的任何迁移。
+--
+-- 历史说明：V3__seed_demo_data.sql 的演示数据位于默认迁移 classpath:db/migration
+-- 下，且已写入存量数据库的 flyway_schema_history，无法直接删除或修改。因此新的
+-- 演示种子请以 V{n}__描述.sql 命名放入本目录，仅 demo profile 生效。
+--
+-- 本占位迁移确保该目录在类路径上存在、可被 Flyway 解析（空目录可能被构建/打包剔除）。
+SELECT 1;

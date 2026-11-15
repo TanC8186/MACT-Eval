@@ -1,0 +1,2 @@
+ALTER TABLE evaluation_reports
+    ADD COLUMN IF NOT EXISTS data_source VARCHAR(20) NOT NULL DEFAULT 'UNKNOWN';

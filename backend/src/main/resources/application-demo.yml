@@ -1,0 +1,14 @@
+# demo profile — 演示环境专用配置
+# 仅在激活 demo profile 时加载：
+#   --spring.profiles.active=demo  或  SPRING_PROFILES_ACTIVE=demo
+#
+# 说明：默认迁移位置为 classpath:db/migration，其中 V3__seed_demo_data.sql 会无条件
+# 写入演示数据且已存在于存量库的 flyway_schema_history，无法删除/修改（见
+# docs/database-migration-notes.md）。演示种子迁移统一放在 classpath:db/demo，
+# 仅在本 profile 激活时才叠加加载，从而与生产默认迁移隔离。
+spring:
+  config:
+    activate:
+      on-profile: demo
+  flyway:
+    locations: classpath:db/migration,classpath:db/demo

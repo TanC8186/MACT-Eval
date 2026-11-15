@@ -1,0 +1,9 @@
+# Local Docker Compose without NVIDIA GPU.
+# Build the dashboard first: pnpm build:web
+# Usage: docker compose --env-file .env -f docker-compose.yml -f docker-compose.cpu.yml up --build -d
+services:
+  ai-service:
+    environment:
+      MACT_AI_DEVICE: "cpu"
+      MACT_AI_WHISPER_DEVICE: "cpu"
+      MACT_AI_WHISPER_COMPUTE_TYPE: "int8"

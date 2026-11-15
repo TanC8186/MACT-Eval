@@ -1,0 +1,42 @@
+{
+  "name": "@mact-eval/design-tokens",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./colors": {
+      "import": "./src/colors.ts",
+      "types": "./src/colors.ts"
+    },
+    "./typography": {
+      "import": "./src/typography.ts",
+      "types": "./src/typography.ts"
+    },
+    "./spacing": {
+      "import": "./src/spacing.ts",
+      "types": "./src/spacing.ts"
+    },
+    "./breakpoints": {
+      "import": "./src/breakpoints.ts",
+      "types": "./src/breakpoints.ts"
+    },
+    "./shadows": {
+      "import": "./src/shadows.ts",
+      "types": "./src/shadows.ts"
+    }
+  },
+  "scripts": {
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,22 @@
+# Docker build context for the teacher-web image only (single-web delivery).
+#
+# docker-compose.yml builds teacher-web with `context: ./frontend`, so this file
+# is the one that decides what enters that build context. Without it, every
+# workspace app (including the retained student-web historical prototype) and
+# every node_modules tree is uploaded to the daemon on each build.
+#
+# The image only needs:  apps/teacher-web/dist  +  apps/teacher-web/nginx.conf
+# (see apps/teacher-web/Dockerfile). Everything not needed is excluded, and the
+# teacher-web artifacts are explicitly re-included because a broad exclude would
+# otherwise drop them.
+
+# Exclude everything by default, then allow only what the image copies.
+*
+
+# Teacher-web build output and nginx config (the only COPY sources).
+!apps/teacher-web/dist
+!apps/teacher-web/dist/**
+!apps/teacher-web/nginx.conf
+
+# student-web is a retained historical prototype: it is NOT part of the built
+# image, so its source and dist never enter the build context.

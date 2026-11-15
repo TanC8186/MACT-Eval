@@ -1,0 +1,63 @@
+# 容量矩阵（P1-6）专用的数据落盘 override。
+#
+# 为什么需要它：基础编排把 postgres/redis/minio 的数据放在**命名卷**里，而本机
+# Docker 的 DockerRootDir 是 VM 内的 /var/lib/docker，落在 C: 盘（170 GB）。本轮
+# 容量测量的硬约束是"任何数据都不许写进 C:"，因此这里把三个数据卷全部改成
+# **宿主机绑定挂载**，根目录由 MACT_CAP_DATA_ROOT 指定（必须在 E: 盘上）。
+#
+# 用法（必须同时给出三个文件，顺序不能变）：
+#   docker compose -p mact-capm \
+#     -f docker-compose.yml \
+#     -f docker-compose.capacity-cpu.yml \
+#     -f scripts/ops/capacity_matrix_volumes.yml \
+#     --env-file data/tmp/capacity-2026-10-28/mact-capm/capacity.env up -d ...
+#
+# 两个变量都带 `:?`（缺值即失败），避免默默退回命名卷或把数据写到当前目录。
+# 顶层 `volumes:` 用 `!reset` 清空：即使没有任何服务再引用它们，也不让 Compose
+# 顺手创建 mact-capm_postgres_data 这类命名卷（验证方式：
+# `docker compose ... config --volumes` 必须输出为空，`docker volume ls` 不得增长）。
+#
+# 端口沿用 docker-compose.capacity-cpu.yml 的隔离段，唯一改动是 ai-service 的端口
+# **区间**从 18001-18002 扩到 18001-18006：矩阵要跑 4 并发（4 个消费者），固定
+# 两端口会让第 3 个容器绑定失败而 Compose 仍可能返回 0。
+
+services:
+  postgres:
+    volumes: !override
+      - "${MACT_CAP_DATA_ROOT:?MACT_CAP_DATA_ROOT must be set (E: drive path)}/pg:/var/lib/postgresql/data"
+
+  redis:
+    volumes: !override
+      - "${MACT_CAP_DATA_ROOT:?MACT_CAP_DATA_ROOT must be set (E: drive path)}/redis:/data"
+
+  minio:
+    volumes: !override
+      - "${MACT_CAP_DATA_ROOT:?MACT_CAP_DATA_ROOT must be set (E: drive path)}/minio:/data"
+
+  ai-service:
+    ports: !override
+      # 1..6 个消费者都落在这一段内；矩阵最大用到 18004（4 并发）。
+      - "127.0.0.1:18001-18006:8001"
+    volumes: !override
+      # 基础编排把宿主机 ~/.cache 挂进来，那是 C: 盘。这里换成 E: 盘上的副本，
+      # 并显式只读：模型只读，运行期不允许往缓存目录写任何东西。
+      - "${MACT_CAP_REPO_ROOT:?MACT_CAP_REPO_ROOT must be set}/data/tmp/capacity-2026-10-28/hf-cache:/root/.cache/huggingface:ro"
+      - "${MACT_CAP_REPO_ROOT:?MACT_CAP_REPO_ROOT must be set}/models:/app/models"
+      # 临时媒体副本与上传目录都落在矩阵自己的目录下，便于按行统计磁盘增量。
+      - "${MACT_CAP_DATA_ROOT:?MACT_CAP_DATA_ROOT must be set}/ai-work:/app/data/ai-work"
+      - "${MACT_CAP_DATA_ROOT:?MACT_CAP_DATA_ROOT must be set}/uploads:/app/data/uploads"
+    environment:
+      # 缓存已完整落在 E: 盘，禁止联网下载：否则失效的离线缓存会静默退回网络。
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+
+  backend:
+    volumes: !override
+      - "${MACT_CAP_REPO_ROOT:?MACT_CAP_REPO_ROOT must be set}/models:/app/models"
+      - "${MACT_CAP_DATA_ROOT:?MACT_CAP_DATA_ROOT must be set}/backend-uploads:/app/data/uploads"
+
+# 清掉顶层命名卷声明，确保不可能被创建。
+volumes:
+  postgres_data: !reset null
+  redis_data: !reset null
+  minio_data: !reset null

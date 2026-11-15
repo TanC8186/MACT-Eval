@@ -1,0 +1,162 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local delivery packages (folder is tracked; zip is a rebuild artifact)
+*.zip
+
+# Office lock / temp
+~$*
+*.tmp
+.tmp/
+
+# 本地运行产物（P0-1，2026-10-28）
+#
+# 这些目录跑一次就会出现、永远不该进提交，但此前一条规则都没有，于是
+# `git status` 里恒有上千行噪声，真正的改动被埋在里面。
+# 只忽略目录本身，不删除任何数据：data/tmp 下是隔离测试库、媒体副本和
+# 运行日志，删掉会让下次验收变慢甚至丢证据。
+.docker-build-ai/
+data/tmp/
+.cache/
+# 正式 Compose 的数据目录（P0-1，2026-10-28）。postgres/redis/minio 从命名卷
+# 改为项目内 bind mount 后，数据库文件、AOF 与对象存储都落在这里。
+# 它们是运行数据，不入库；也不要为了让 `git status` 干净而删除——删掉等于丢库。
+# 用 data/docker/.gitkeep 保留空目录，使 `docker compose up` 不必先手工 mkdir。
+data/docker/*
+!data/docker/.gitkeep
+# TLS 证书与私钥（SEC-13）。deploy/tls/README.md 是清单，
+# 真实证书绝不入库；.gitkeep 只保留目录结构。
+deploy/tls/certs/*
+!deploy/tls/certs/.gitkeep
+.worktrees/
+.venv-browser/
+.venv/
+.venv-*/
+.playwright-mcp/
+.pytest_cache/
+**/.pytest_cache/
+.tmp-*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (local only; SCB dataset ~9GB stays on disk, never commit)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+data/SCB-Dataset3 yolo dataset/
+data/**/*.zip
+data/uploads/*
+ai-service/data/uploads/*
+# 动作级评价的原始预测（任务书 §D）。与 data/raw、data/processed 同一口径：
+# 它们是从**仅限非商业研究使用**的课堂视频派生的逐帧数据，许可要求"仅输出聚合
+# 特征、不重新分发"。因此不入库；可复现的聚合数字与哈希写进
+# docs/experiments/action-eval-real-sample-2026-10-29.md，原始预测可用
+# tools/public_data/export_fixed_sample_predictions.py 重新生成。
+data/action-eval/
+backend/data/
+
+# Models (weights are too large for git)
+models/*.pth
+models/*.pt
+models/*.onnx
+!models/.gitkeep
+# Ultralytics auto-downloads weights at the repo root during training
+/*.pt
+*.part
+
+# Environment
+.env
+.env.local
+*.local
+
+# Logs
+logs/
+*.log
+
+# Docker
+.docker/
+Dockerfile.patch
+*.Dockerfile.local
+**/Dockerfile.local
+backend/app.jar
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+*.egg
+ai-service/.venv-test/
+ai-service/.venv-clean-test/
+venv/
+env/
+.pytest_cache/
+
+# Maven
+target/
+*.jar
+*.war
+
+# Build artifacts (never commit)
+dist/
+*.tsbuildinfo
+.mypy_cache/
+
+# MinIO data
+minio_data/
+
+# Local data / uploads
+data/uploads/*
+
+# Legacy directories (replaced by frontend/ + backend/ + ai-service/)
+ai_service/
+.superpowers/
+.playwright-mcp/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Uploaded files (local fallback)
+backend/data/uploads/*
+
+# Ultralytics training output
+runs/
+ai-service/runs/
+**/__pycache__/
+
+# Keep archived baseline experiment runs (thesis evidence)
+!docs/archives/baseline-work/**/runs/
+!docs/archives/baseline-work/**/runs/**
+!docs/archives/baseline-work/**/mact_eval_pipeline/runs/**
+!docs/archives/baseline-work/**/classroom_behavior/runs/**
+
+
+# Baseline experiment noise (keep source; ignore caches only)
+docs/archives/baseline-work/**/__pycache__/
+
+# Keep all archived baseline experiment runs (thesis evidence)
+!docs/archives/baseline-work/**/runs/
+!docs/archives/baseline-work/**/runs/**
+
+# Personal resume drafts — never commit or push
+docs/resume/
+**/*/__pycache__/

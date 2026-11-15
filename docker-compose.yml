@@ -1,0 +1,207 @@
+# 开发/演示编排。所有宿主端口绑定 127.0.0.1，避免把数据库、Redis、MinIO、
+# 后端与 AI 服务直接暴露到校园网。需要局域网演示时使用显式 override 文件，
+# 不要修改本文件把端口重新绑定到 0.0.0.0。
+#
+# 数据落盘（P0-1，2026-10-28）：postgres/redis/minio 之前用命名卷，而 Docker
+# Desktop 的数据根在 C 盘，于是"项目内数据"实际写在 C:\Users\...\Docker\wsl\
+# disk\docker_data.vhdx 里。现在三者全部改为**项目内 bind mount**
+# （./data/docker/<service>），数据文件直接可见、可备份、可搬移。
+#
+# 这条路已在本机验证过，不是推测：隔离演练栈 mact-ui-postgres 从 2026-10-26
+# 起就以 `-v <project>/data/tmp/ui-rig-2026-10-26/pg:/var/lib/postgresql/data`
+# 运行 postgres:16-alpine，initdb、checkpoint 与 recovery 均正常（日志无
+# permission denied，PG_VERSION=16，20 张表在线）。同一 postgres 镜像、
+# 同一 Windows bind mount 机制。
+services:
+  postgres:
+    image: postgres@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      - POSTGRES_USER=macteval
+      - POSTGRES_PASSWORD=macteval
+      - POSTGRES_DB=macteval
+    volumes:
+      # 目录由 data/docker/.gitkeep 占位；宿主侧为 E:/Personal_Design/data/docker/postgres
+      - ./data/docker/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U macteval"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./data/docker/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    # 固定为本次验证过的 digest（对应 2025 年 RELEASE）。升级前先在备份副本
+    # 上验证数据卷兼容性；不要直接改回 latest。
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    environment:
+      - MINIO_ROOT_USER=macteval
+      - MINIO_ROOT_PASSWORD=macteval_secret
+      # 预签名 URL 使用宿主机可达地址（浏览器需通过 localhost:9000 上传，minio:9000 仅在容器网络内可达）
+      - MINIO_SERVER_URL=http://localhost:9000
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./data/docker/minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/macteval
+      - SPRING_DATASOURCE_USERNAME=macteval
+      - SPRING_DATASOURCE_PASSWORD=macteval
+      - SPRING_DATA_REDIS_HOST=redis
+      - MACT_MINIO_ENDPOINT=http://minio:9000
+      - MACT_MODEL_DIR=/app/models
+      - MACT_AI_SERVICE_URL=http://ai-service:8001
+      - MACT_MINIO_ENABLED=true
+      - MACT_DEMO_ENABLED=false
+      - MACT_MULTIPART_TMP=/app/data/tmp/multipart
+      - MACT_JWT_SECRET=${MACT_JWT_SECRET:-}
+      # 双密钥轮换（docs/operations/runbook.md §4）：第一个签名、全部验证。
+      # 留空时 backend 回退到 MACT_JWT_SECRET，既有部署不受影响。
+      - MACT_JWT_SECRETS=${MACT_JWT_SECRETS:-}
+      - MACT_JWT_RETIRED_AT=${MACT_JWT_RETIRED_AT:-}
+      - MACT_SERVICE_TOKEN=${MACT_SERVICE_TOKEN:-mact-eval-dev-token}
+    volumes:
+      - ./models:/app/models
+      - ./data/uploads:/app/data/uploads
+      # multipart 临时文件（单文件上限 2 GB）必须落在项目盘：
+      # application.yml 的 spring.servlet.multipart.location 指向这里。
+      # 不挂的话，它落在容器可写层，也就是 DockerRootDir（本机在 C 盘 vhdx）。
+      - ./data/tmp/multipart:/app/data/tmp/multipart
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "3", "-O", "/dev/null", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    # Measured backend RSS peaked at 466 MB during a 40-minute ASR callback;
+    # 512m leaves no headroom for report generation. Keep 1g on this host.
+    mem_limit: 1g
+    restart: unless-stopped
+
+  ai-service:
+    build: ./ai-service
+    # GPU 本机无 NVIDIA 时不要加 gpus:all；有 GPU 时可恢复: gpus: all
+    entrypoint: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    command: []
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      # 模型缓存改为项目内目录（P0-1，2026-10-28）。原来挂的是
+      # `~/.cache:/root/.cache`——宿主上那是 C:\Users\<user>\.cache，
+      # 去重表/模型/编译缓存全部写进 C 盘，而这条挂载在 Windows 上还会把
+      # 整个用户缓存目录（本机 5.6 GB）暴露给容器。
+      #
+      # 只挂 huggingface 子树，不挂整个 /root/.cache：容器的其它缓存（pip、torch
+      # 扩展编译）体积小，留在容器可写层没有意义地放大镜像层；模型权重才是
+      # 需要跨容器存活、需要落在 E 盘的部分。
+      #
+      # 预置内容：faster-whisper small（928 MB，从本机 C:\Users\...\.cache 复制，
+      # 不重新下载）。HF_HOME 让 huggingface_hub 使用该目录；faster-whisper 的
+      # ctranslate2 走 huggingface_hub 的 snapshot_download，因此同一个变量即可。
+      - ./.cache/huggingface:/root/.cache/huggingface
+      - ./models:/app/models
+      - ./data/uploads:/app/data/uploads
+      # 分析时的临时媒体副本落在数据盘，而不是容器可写层（容器可写层在系统盘）：
+      # 一个 2.6 GB 的 120 分钟课堂视频会直接吃掉 C 盘空间。
+      - ./data/tmp/ai-work:/app/data/ai-work
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - HUGGINGFACE_HUB_CACHE=/root/.cache/huggingface/hub
+      # 只用本地缓存的模型：容器若离线（校园网/防火墙），attempt 直接失败并报
+      # "model not found in cache"，而不是在运行中挂住等下载。
+      - HF_HUB_OFFLINE=${MACT_AI_HF_OFFLINE:-0}
+      - MACT_AI_REDIS_URL=redis://redis:6379/0
+      - MACT_AI_MINIO_ENDPOINT=minio:9000
+      - MACT_AI_BACKEND_URL=http://backend:8000/api
+      - MACT_AI_DEVICE=cpu
+      - MACT_AI_WHISPER_DEVICE=cpu
+      - MACT_AI_WHISPER_COMPUTE_TYPE=int8
+      - MACT_AI_DEMO_ENABLED=false
+      # 为教师复核识别准确性保留代表帧（私有 analysis-artifacts 桶）
+      - MACT_AI_EVIDENCE_FRAMES_ENABLED=true
+      # 临时媒体目录：默认在系统临时目录，本项目要求数据只落 E 盘。
+      - MACT_AI_WORK_DIR=/app/data/ai-work
+      - MACT_AI_BEHAVIOR_WEIGHTS=${MACT_AI_BEHAVIOR_WEIGHTS:-}
+      - MACT_AI_BEHAVIOR_CONFIDENCE=${MACT_AI_BEHAVIOR_CONFIDENCE:-0.4}
+      - MACT_AI_EVIDENCE_FRAME_MAX_PER_WINDOW=${MACT_AI_EVIDENCE_FRAME_MAX_PER_WINDOW:-4}
+      - MACT_AI_SERVICE_TOKEN=${MACT_SERVICE_TOKEN:-mact-eval-dev-token}
+      - MACT_AI_DEEPSEEK_API_KEY=${MACT_AI_DEEPSEEK_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Host-native 40-min ASR (small/float16) peaked at 2.45 GB RSS and 2.64 GB
+    # VRAM; the previous 1g limit would OOM-kill the worker. CPU/int8 has a
+    # different profile and still needs re-measurement before lowering this.
+    mem_limit: 4g
+    restart: unless-stopped
+
+  teacher-web:
+    build:
+      context: ./frontend
+      dockerfile: apps/teacher-web/Dockerfile
+    ports:
+      - "127.0.0.1:3000:80"
+    environment:
+      # CSP 里的媒体源必须与预签名 URL 的 host **完全一致**，否则证据帧与
+      # 直传会在浏览器里被 CSP 拦掉，而服务端日志一切正常（只在控制台表现为
+      # "Refused to load"）。两者都从同一个变量派生，避免改一处忘另一处。
+      - MACT_CSP_MEDIA_ORIGIN=${MACT_MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "3", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 256m
+    restart: unless-stopped
+
+# 注意：这里不再声明任何命名卷。
+# 命名卷的数据实体在 DockerRootDir 里（本机为 C:/Users/<user>/AppData/Local/
+# Docker/wsl/disk/docker_data.vhdx），无论 compose 怎么写都不在项目盘上。
+# 改成 bind mount 后三个数据目录直接位于 E:/Personal_Design/data/docker/ 下，
+# 备份只需拷目录，磁盘占用也可见。若未来确实需要命名卷（某个驱动不支持 bind），
+# 必须先迁移 Docker 数据根，否则 scripts/verify/check_disk_policy.py 会判失败。

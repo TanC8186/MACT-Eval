@@ -1,0 +1,26 @@
+{
+  "synthetic": true,
+  "purpose": "Illustrative data flow only; not an API import fixture or a measured classroom result.",
+  "window": {
+    "start_seconds": 0,
+    "end_seconds": 60
+  },
+  "video": {
+    "candidate_actions": [
+      {
+        "label": "hand-raising",
+        "confidence": 0.82,
+        "timestamp_seconds": 24
+      }
+    ],
+    "posture_score": null
+  },
+  "speech": {
+    "transcript": "Synthetic example: What can we observe in this experiment?",
+    "question_count": 1
+  },
+  "report": {
+    "evidence_available": true,
+    "classroom_validity_established": false
+  }
+}

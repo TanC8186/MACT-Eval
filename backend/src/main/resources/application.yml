@@ -1,0 +1,226 @@
+spring:
+  application:
+    name: mact-eval
+
+  # 优雅停机：等待进行中的请求/任务完成后才退出，最多 30s
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  datasource:
+    url: ${MACT_DB_URL:jdbc:postgresql://localhost:5432/macteval}
+    username: ${MACT_DB_USERNAME:macteval}
+    password: ${MACT_DB_PASSWORD:macteval}
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    # 默认迁移位置：classpath:db/migration
+    # 已知问题：V3__seed_demo_data.sql 会无条件写入演示数据（admin/teacher/班级/课程），
+    # 且已存在于存量数据库的 flyway_schema_history，无法直接删除或修改该迁移。
+    # 后续演示种子请放入 classpath:db/demo，仅通过 demo profile（application-demo.yml）加载。
+    # 详见 docs/database-migration-notes.md。
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # Do not let a blackholed Redis hold an outbox transaction for the
+      # Lettuce default (~60s). A failed publish is retried from task_outbox.
+      timeout: 5s
+      connect-timeout: 5s
+
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+      # 必须是项目内目录（P0-1，2026-10-28）。默认的 java.io.tmpdir 在容器里
+      # 就是容器的可写层，而可写层位于 DockerRootDir（本机在 C 盘 vhdx）。
+      # 一个 2 GB 的 multipart 上传会临时占满系统盘。compose 把该目录挂到
+      # 项目内的 ./data/tmp/multipart；本机直接运行（非容器）时同样是相对
+      # 仓库根的路径，由 Spring 负责创建。
+      location: ${MACT_MULTIPART_TMP:./data/tmp/multipart}
+
+  jackson:
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+server:
+  port: 8000
+  shutdown: graceful
+  # 反代后必须读 X-Forwarded-*（SEC-13，2026-10-28）。
+  # 不设这一项时 Spring 用 request.getScheme()，在 TLS 终止于反向代理的
+  # 部署里永远是 http：request.isSecure() 为 false、HSTS 不写、
+  # 生成的绝对 URL 写成 http。这类问题在纯 HTTP 的本机开发里完全不可见。
+  forward-headers-strategy: ${MACT_FORWARD_HEADERS_STRATEGY:framework}
+  servlet:
+    context-path: /api
+
+mact:
+  minio:
+    enabled: ${MACT_MINIO_ENABLED:true}
+    endpoint: http://localhost:9000
+    # 浏览器可访问的 MinIO 端点（宿主机视角）。
+    public-endpoint: ${MACT_MINIO_PUBLIC_ENDPOINT:http://localhost:9000}
+    access-key: ${MACT_MINIO_ACCESS_KEY:macteval}
+    secret-key: ${MACT_MINIO_SECRET_KEY:macteval_secret}
+    buckets:
+      teaching-resources: teaching-resources
+      student-submissions: student-submissions
+      classroom-raw-media: classroom-raw-media
+      analysis-artifacts: analysis-artifacts
+      report-attachments: report-attachments
+      temporary-uploads: temporary-uploads
+
+  model:
+    dir: ${MACT_MODEL_DIR:../models}
+
+  jwt:
+    # REQUIRED: override with MACT_JWT_SECRET (>= 32 bytes). Startup fails if unset/weak.
+    secret: ${MACT_JWT_SECRET:}
+    # 双密钥轮换：逗号分隔，第一个用于签发，全部用于验证；留空则回退到上面的 secret。
+    # 轮换期"旧令牌还在路上"是常态，单值配置无法同时认新旧两把钥匙。
+    secrets: ${MACT_JWT_SECRETS:}
+    # 旧密钥退役时刻（ISO-8601，如 2026-11-06T00:00:00Z）；过了这个点仍未删除旧键则拒绝启动。
+    # 留着不删的旧键就是长期可伪造窗口，所以到期不自动忽略而是显式失败。
+    retired-at: ${MACT_JWT_RETIRED_AT:}
+    expiration: 86400000
+    refresh-expiration: 604800000
+
+  # 服务间回调令牌：生产环境必须通过 MACT_SERVICE_TOKEN 覆盖默认值
+  service-token: ${MACT_SERVICE_TOKEN:mact-eval-dev-token}
+
+  ai-service:
+    url: ${MACT_AI_SERVICE_URL:http://localhost:8001}
+
+  # 晚期加权融合（仅 video/speech 两模态）
+  fusion:
+    # 权重来源：equal（默认 0.5/0.5）| prior（理论先验）| config（显式权重）| learned（离线学习权重）
+    weight-source: ${MACT_FUSION_WEIGHT_SOURCE:equal}
+    # CONFIG/LEARNED 模式的显式权重；未提供时回退 EQUAL 并记录来源为 EQUAL
+    weights:
+      video: ${MACT_FUSION_WEIGHT_VIDEO:}
+      speech: ${MACT_FUSION_WEIGHT_SPEECH:}
+    # PRIOR 模式的理论先验（视觉线索主导敏感性先验 0.6/0.4）
+    prior:
+      video: ${MACT_FUSION_PRIOR_VIDEO:0.6}
+      speech: ${MACT_FUSION_PRIOR_SPEECH:0.4}
+
+  cors:
+    # 单端交付（2026-10-27）：只放行教师/管理员端的两个正式来源。
+    # 3001 是已下线学生端、5174/5175 是双端时代的 Vite 端口，均不再允许。
+    allowed-origins: http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173
+
+  # WebSocket 鉴权（SEC-02，2026-10-28）。
+  #
+  # 默认只接受 POST /auth/ws-ticket 签发的一次性票据（60 秒、单次消费、绑定课堂）。
+  # 旧写法 ?token=<access JWT> 默认**关闭**：它把 24 小时有效的教师凭据写进
+  # nginx 访问日志与 `docker compose logs teacher-web`。
+  #
+  # legacy-token-enabled=true 只用于给外部脚本一个明确迁移窗口，且每次使用都会
+  # 打 WARN。迁移完成后把这个开关连同 JwtHandshakeInterceptor 的对应分支一起删除。
+  ws:
+    legacy-token-enabled: ${MACT_WS_LEGACY_TOKEN_ENABLED:false}
+
+  async:
+    job-poll-interval: 5000
+    job-timeout-ms: 300000
+
+  demo:
+    enabled: ${MACT_DEMO_ENABLED:false}
+
+  media:
+    # 媒体资产保留期与单课堂配额
+    retention-days: ${MACT_MEDIA_RETENTION_DAYS:90}
+    max-assets-per-lesson: ${MACT_MEDIA_MAX_ASSETS_PER_LESSON:20}
+    # 服务端上传校验（SEC-03，2026-10-28）。直传路径不经过 Spring，因此
+    # spring.servlet.multipart.max-file-size 对它无效，必须在这里另设。
+    #
+    # max-bytes 与前端 MAX_FILE_BYTES、multipart 上限都取 2 GiB：
+    # 服务端不得比对外宣称的值更宽松，否则"单文件最大 2GB"就是假话。
+    max-bytes: ${MACT_MEDIA_MAX_BYTES:2147483648}
+    # 单课堂累计容量。20 个资产 × 2 GiB = 40 GiB 远超合理用量，这里按
+    # "一节课的原始媒体 + 音轨"的实际上限取 8 GiB。
+    max-bytes-per-lesson: ${MACT_MEDIA_MAX_BYTES_PER_LESSON:8589934592}
+    # application/octet-stream 是一个"我不知道类型"的声明，放行它等于放行任意
+    # 类型。默认关闭；只有确实需要从非浏览器客户端上传时才开启。
+    allow-octet-stream: ${MACT_MEDIA_ALLOW_OCTET_STREAM:false}
+
+  upload:
+    # 临时上传接口（SEC-04，2026-10-28）。
+    #
+    # 该桶没有 DB 记录、没有分析任务、没有任何读取方，只有写入。因此：
+    #   temporary-enabled=false 是一个干净的"下线开关"——前端已无调用方，
+    #     关掉它不会影响任何现有流程；
+    #   temporary-retention-hours 控制清扫窗口。默认 24 小时，不是 90 天：
+    #     过了保留期它就是垃圾，而长期保留等于给这个无人管理的入口开一个
+    #     90 天的无限写入窗口。
+    temporary-enabled: ${MACT_UPLOAD_TEMPORARY_ENABLED:true}
+    temporary-retention-hours: ${MACT_UPLOAD_TEMPORARY_RETENTION_HOURS:24}
+
+  attendance:
+    # 课堂开始后超过该分钟数签到记为迟到
+    late-grace-minutes: ${MACT_ATTENDANCE_LATE_GRACE_MINUTES:10}
+
+  outbox:
+    poll-interval-ms: ${MACT_OUTBOX_POLL_INTERVAL_MS:2000}
+    # Published event whose job is still QUEUED after this grace is republished
+    # (Redis stream/group lost). Only QUEUED jobs: RUNNING belongs to mact.recovery.
+    stale-queued-seconds: ${MACT_OUTBOX_STALE_QUEUED_SECONDS:300}
+    reconcile-interval-ms: ${MACT_OUTBOX_RECONCILE_INTERVAL_MS:60000}
+
+  # Database-driven recovery of RUNNING jobs with an expired lease.
+  # See docs/operations/result-delivery-and-recovery-protocol.md section 5.
+  # A persisted result is delivered first; a job is only requeued when the store
+  # is reachable and confirms no result. Store errors defer, never requeue.
+  recovery:
+    enabled: ${MACT_RECOVERY_ENABLED:true}
+    interval-ms: ${MACT_RECOVERY_INTERVAL_MS:30000}
+    batch-size: ${MACT_RECOVERY_BATCH_SIZE:20}
+    # Extra wait after the lease expires, absorbing heartbeat jitter/clock skew.
+    lease-grace-seconds: ${MACT_RECOVERY_LEASE_GRACE_SECONDS:60}
+    max-attempts: ${MACT_RECOVERY_MAX_ATTEMPTS:3}
+    # Deferral when the result store is unreachable.
+    retry-backoff-seconds: ${MACT_RECOVERY_RETRY_BACKOFF_SECONDS:120}
+    # Alert (state unchanged) when a job stays RUNNING longer than this.
+    alert-after-seconds: ${MACT_RECOVERY_ALERT_AFTER_SECONDS:900}
+
+  # Read-only access to undelivered result objects. Signed URLs are never stored.
+  result-store:
+    bucket: ${MACT_RESULT_BUCKET:analysis-artifacts}
+    prefix: ${MACT_RESULT_PREFIX:analysis-results}
+    connect-timeout-seconds: ${MACT_RESULT_CONNECT_TIMEOUT_SECONDS:5}
+    read-timeout-seconds: ${MACT_RESULT_READ_TIMEOUT_SECONDS:10}
+    # Hard cap on a stored result object; a larger object is INVALID, never re-run.
+    # Measured 120-minute video result metadata is ~334 KB, so 8 MB is a safety net.
+    max-result-bytes: ${MACT_RESULT_MAX_BYTES:8388608}
+
+  privacy:
+    # 原始媒体保留期（天），超过后由 DataRetentionService 定时清理
+    retention-days: 90
+    # 是否要求采集前知情同意（教学场景隐私合规开关）
+    consent-required: true
+    # 本地上传目录（相对后端工作目录），数据保留清理任务的扫描路径
+    upload-dir: data/uploads
+    # 数据保留清理任务的 cron 表达式，默认每天 03:00 执行
+    cleanup-cron: "0 0 3 * * *"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      # 生产环境应设为 never；本地调试可设 always 查看组件详情
+      show-details: ${MACT_HEALTH_SHOW_DETAILS:when-authorized}

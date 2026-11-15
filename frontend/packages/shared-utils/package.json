@@ -1,0 +1,34 @@
+{
+  "name": "@mact-eval/shared-utils",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./format": {
+      "import": "./src/format.ts",
+      "types": "./src/format.ts"
+    },
+    "./date": {
+      "import": "./src/date.ts",
+      "types": "./src/date.ts"
+    },
+    "./validation": {
+      "import": "./src/validation.ts",
+      "types": "./src/validation.ts"
+    }
+  },
+  "scripts": {
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Spring Boot 默认转换规则 (%clr 彩色、CONSOLE_LOG_PATTERN 等) -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- ======================= 开发环境 (默认): 彩色人类可读日志 ======================= -->
+    <springProfile name="!prod">
+        <property name="CONSOLE_LOG_PATTERN"
+                  value="%d{yyyy-MM-dd HH:mm:ss.SSS} %clr(%5p) %clr([%15.15t]){faint} %clr(%logger{36}){cyan} [req=%X{requestId:-}] [user=%X{userId:-}] %m%n"/>
+
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ======================= 生产环境 (prod profile): JSON 结构化日志 ======================= -->
+    <springProfile name="prod">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- 输出 requestId/userId 等 MDC 字段。
+                     注意：LogstashEncoder 的 mdcKeyFieldName 语义是“把某个 MDC key
+                     映射为 fieldName”，必须写成 key=fieldName；历史上的
+                     mdcKeyFieldName=mdc 会在 logback 初始化阶段抛错导致 prod 启动失败。 -->
+                <includeMdc>true</includeMdc>
+                <customFields>{"service":"mact-eval-backend","env":"prod"}</customFields>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>

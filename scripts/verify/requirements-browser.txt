@@ -1,0 +1,26 @@
+# 教师端真实浏览器验收的固定依赖（P0-3）
+#
+# 为什么必须固定版本：`browser_evidence_e2e.py` 的断言依赖 Playwright 的
+# 行为细节（网络拦截、CDP 缓存开关、`expect_download` 语义）。不固定版本时，
+# 换一台机器装到新版 Playwright 可能让 U03/U08 的注入时序变掉，而脚本一行不改，
+# 结果从"通过"变成"偶发失败"且无法归因。
+#
+# 安装（Windows，必须指到 E 盘）：
+#   python -m venv E:/Personal_Design/.venv-browser
+#   E:/Personal_Design/.venv-browser/Scripts/python.exe -m pip install \
+#       --cache-dir E:/Personal_Design/.cache/pip \
+#       -r scripts/verify/requirements-browser.txt
+#   PLAYWRIGHT_BROWSERS_PATH=E:/Personal_Design/.cache/ms-playwright \
+#       E:/Personal_Design/.venv-browser/Scripts/python.exe -m playwright install chromium
+#
+# 版本来源：本机已实测可通过 `python scripts/verify/browser_evidence_e2e.py --self-check`
+# 的组合（Python 3.13.5）。升级任何一行都必须重跑 --self-check 与一次真实 E2E。
+
+requests==2.34.2
+playwright==1.60.0
+
+# U08 需要直接对隔离 MinIO 做"真实删除对象"操作；没有它该用例只能记 incomplete。
+minio==7.2.8
+
+# 说明：Chromium 版本由 `playwright install chromium` 按 playwright 版本自带绑定，
+# 不要单独 pip 装浏览器，也不要复用开发机全局安装。

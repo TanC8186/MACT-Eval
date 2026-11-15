@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs are intentionally included for the static nginx image.
+# 单端交付（2026-10-27）：只有 teacher-web 的 dist 进入构建上下文；
+# student-web 源码保留为历史原型，但它的产物不得被打进任何镜像层。
+!frontend/apps/teacher-web/dist
+!frontend/apps/teacher-web/dist/**
+target
+**/target
+
+# Version control
+.git
+
+# Project data
+data
+models
+
+# Python caches
+.pytest_cache
+**/.pytest_cache
+__pycache__
+**/__pycache__
+
+# Logs
+*.log
+
+# Documentation and datasets
+docs
+datasets
+
+# Environment files (secrets must NOT be baked into image layers)
+.env
+**/.env
+ai-service/.env

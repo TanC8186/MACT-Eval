@@ -1,0 +1,24 @@
+{
+  "name": "mact-eval-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:teacher-web": "pnpm --filter @mact-eval/teacher-web dev",
+    "build:packages": "node -e \"console.log('shared packages are consumed as TypeScript source; no separate build step')\"",
+    "build:web": "pnpm --filter @mact-eval/teacher-web build",
+    "test:backend": "mvn -f backend/pom.xml test",
+    "test:ai": "python scripts/verify/run_ai_tests.py",
+    "test:tools": "python -m pytest tools/public_data/tests -q -p no:cacheprovider",
+    "test:frontend-auth": "cd frontend/apps/teacher-web && node --experimental-strip-types --no-warnings tests/auth-session.test.mjs",
+    "test:frontend-evidence": "node --experimental-strip-types --no-warnings frontend/apps/teacher-web/tests/evidence-gallery.test.mjs",
+    "test:all": "pnpm run test:backend && pnpm run test:ai && pnpm run test:tools && pnpm run test:frontend-auth && pnpm run test:frontend-evidence && pnpm run test:ops",
+    "test:ops": "python -m pytest scripts/ops/tests -q -p no:cacheprovider",
+    "typecheck:web": "pnpm --filter @mact-eval/teacher-web exec vue-tsc --noEmit",
+    "verify:prod": "bash scripts/verify/prod_startup_smoke.sh",
+    "verify:all": "bash scripts/verify/verify_all.sh"
+  },
+  "devDependencies": {
+    "unplugin-vue-components": "^32.1.0"
+  },
+  "packageManager": "pnpm@11.15.1"
+}
